@@ -1,5 +1,13 @@
 {
   "game": 1,
-  "moves": [],
+  "moves": [
+    {
+      "uci": "e2e4",
+      "san": "e4",
+      "color": "w",
+      "user": "shabjan25",
+      "at": "2026-10-09T08:02:18.689Z"
+    }
+  ],
   "last": ""
 }
