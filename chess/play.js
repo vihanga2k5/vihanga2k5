@@ -42,36 +42,41 @@ function resultText(c) {
 }
 
 // ---------- rendering ----------
-const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+const PIECES = JSON.parse(fs.readFileSync('chess/pieces.json', 'utf8'));
+
+// Board colors inspired by chess.com's classic green theme
+const LIGHT = '#EEEED2', DARK = '#769656', HL_LIGHT = '#F5F682', HL_DARK = '#BACA2B';
 
 function boardSvg(c) {
-  const S = 60, M = 24, W = S * 8 + M * 2;
+  const S = 100, W = S * 8;
   const last = state.moves.at(-1)?.uci;
   const hl = last ? [last.slice(0, 2), last.slice(2, 4)] : [];
   const b = c.board();
-  let o = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${W}" width="${W}" height="${W}">`;
-  o += `<rect width="${W}" height="${W}" rx="16" fill="#0D1117"/>`;
+  const defs = Object.entries(PIECES).map(([k, v]) => `<symbol id="${k}" viewBox="0 0 45 45">${v}</symbol>`).join('');
+  let sq = '', pc = '', lb = '';
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
-      const sq = 'abcdefgh'[f] + (8 - r);
+      const name = 'abcdefgh'[f] + (8 - r);
       const light = (r + f) % 2 === 0;
-      let fill = light ? '#e8f5ec' : '#3f9b64';
-      if (hl.includes(sq)) fill = light ? '#aef0c1' : '#1DB954';
-      const x = M + f * S, y = M + r * S;
-      o += `<rect x="${x}" y="${y}" width="${S}" height="${S}" fill="${fill}"/>`;
+      const fill = hl.includes(name) ? (light ? HL_LIGHT : HL_DARK) : (light ? LIGHT : DARK);
+      const x = f * S, y = r * S;
+      sq += `<rect x="${x}" y="${y}" width="${S}" height="${S}" fill="${fill}"/>`;
+      const label = light ? DARK : LIGHT;
+      if (f === 0) lb += `<text x="${x + 7}" y="${y + 24}" font-size="22" font-weight="700" fill="${label}">${8 - r}</text>`;
+      if (r === 7) lb += `<text x="${x + S - 7}" y="${y + S - 8}" font-size="22" font-weight="700" text-anchor="end" fill="${label}">${'abcdefgh'[f]}</text>`;
       const p = b[r][f];
       if (p) {
-        const w = p.color === 'w';
-        o += `<text x="${x + S / 2}" y="${y + S / 2 + 2}" font-size="46" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI Symbol','Apple Symbols','DejaVu Sans',sans-serif" fill="${w ? '#ffffff' : '#111111'}" stroke="${w ? '#111111' : '#e8f5ec'}" stroke-width="1.2" paint-order="stroke">${GLYPH[p.type]}&#xFE0E;</text>`;
+        if (p.type === 'k' && p.color === c.turn() && c.isCheck()) {
+          sq += `<circle cx="${x + S / 2}" cy="${y + S / 2}" r="${S / 2}" fill="url(#chk)"/>`;
+        }
+        pc += `<use href="#${p.color}${p.type.toUpperCase()}" x="${x}" y="${y}" width="${S}" height="${S}"/>`;
       }
     }
   }
-  for (let i = 0; i < 8; i++) {
-    const c1 = M + i * S + S / 2;
-    o += `<text x="${c1}" y="${W - 7}" font-size="12" text-anchor="middle" fill="#8b949e" font-family="sans-serif">${'abcdefgh'[i]}</text>`;
-    o += `<text x="${M / 2}" y="${c1 + 4}" font-size="12" text-anchor="middle" fill="#8b949e" font-family="sans-serif">${8 - i}</text>`;
-  }
-  return o + '</svg>\n';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${W}" width="${W}" height="${W}" font-family="Arial, Helvetica, sans-serif">` +
+    `<defs><clipPath id="r"><rect width="${W}" height="${W}" rx="12"/></clipPath>` +
+    `<radialGradient id="chk"><stop offset="0" stop-color="#ff0000" stop-opacity="0.9"/><stop offset="0.25" stop-color="#e70000" stop-opacity="0.8"/><stop offset="0.89" stop-color="#a90000" stop-opacity="0"/></radialGradient>` +
+    `${defs}</defs><g clip-path="url(#r)">${sq}${pc}${lb}</g></svg>\n`;
 }
 
 function section(c) {
@@ -97,29 +102,33 @@ function section(c) {
 
   return `<div align="center">
 
-${status}
+<img src="chess/board.svg?v=${state.game}-${n}" width="560" alt="Community chess board" />
 
-<img src="chess/board.svg?v=${state.game}-${n}" width="480" alt="Chess board" />
+${status}${state.last ? `<br/>🏁 ${state.last}` : ''}
 
-${state.last ? `🏁 Last game — ${state.last}\n` : ''}
-</div>
+<details>
+<summary><b>♟️ Play your move</b></summary>
 
-> 🎮 **How to play:** pick any move below. It opens a pre-filled GitHub issue, just press **Submit new issue** and the bot plays it within a minute. **Everyone gets exactly one move per game**, and your username is recorded in the move log.
+<br/>
+
+Pick a move below. It opens a pre-filled GitHub issue, press **Submit new issue** and the bot plays it within a minute. **Everyone gets one move per game**, and your username is recorded.
 
 | Piece | Legal moves |
 | :-- | :-- |
 ${rows}
 
-${n ? `**📜 Latest moves**\n\n| # | Move | Played by |\n| :-: | :-: | :-- |\n${log}` : '_No moves yet — be the first to play!_'}`;
+${n ? `**📜 Latest moves**\n\n| # | Move | Played by |\n| :-: | :-: | :-- |\n${log}` : '_No moves yet — be the first to play!_'}
+
+</details>
+
+</div>`;
 }
 
 function render(c) {
   save(STATE, state);
   save(HISTORY, history);
   fs.writeFileSync('chess/board.svg', boardSvg(c));
-  const md = fs.readFileSync('README.md', 'utf8');
-  const re = /<!--CHESS-START-->[\s\S]*<!--CHESS-END-->/;
-  fs.writeFileSync('README.md', md.replace(re, () => `<!--CHESS-START-->\n${section(c)}\n<!--CHESS-END-->`));
+  fs.writeFileSync('README.md', section(c) + '\n');
 }
 
 // ---------- main ----------
